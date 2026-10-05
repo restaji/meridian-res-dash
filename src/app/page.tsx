@@ -1,69 +1,116 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { DashboardFullData } from '../types';
+import { parseDashboardData } from '../lib/dataService';
+import { Header } from '../components/Header';
+import { KPICards } from '../components/KPICards';
+import { PnLChart } from '../components/PnLChart';
+import { PositionsTable } from '../components/PositionsTable';
+import { DecisionFeed } from '../components/DecisionFeed';
+import { LessonsMatrix } from '../components/LessonsMatrix';
+import { PoolIntelligence } from '../components/PoolIntelligence';
+import { BotHealth } from '../components/BotHealth';
 
 export default function Home() {
+  const [data, setData] = useState<DashboardFullData>(() => parseDashboardData());
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [liveMode, setLiveMode] = useState<boolean>(true);
+
+  // Sync data from API route
+  const fetchData = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/data?mode=${liveMode ? 'live' : 'snapshot'}`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
+    } catch (err) {
+      console.warn('Sync failed, keeping current data state:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 400);
+    }
+  };
+
+  // Periodic Auto-Sync every 15s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchData();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [liveMode]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-300">
+      {/* Dynamic Header */}
+      <Header
+        stats={data.stats}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onRefresh={fetchData}
+        isRefreshing={isRefreshing}
+        liveMode={liveMode}
+        setLiveMode={setLiveMode}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Executive KPI Cards (Always visible on all tabs or overview) */}
+        <KPICards stats={data.stats} />
+
+        {/* Tab 1: Executive Overview */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Financial Curve Chart */}
+            <PnLChart data={data.pnlHistory} />
+
+            {/* Quick Preview Grid: Active Positions & Latest Decisions */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <PositionsTable positions={data.positions.slice(0, 5)} />
+              </div>
+              <div className="space-y-4">
+                <DecisionFeed decisions={data.decisions.slice(0, 5)} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Full Positions */}
+        {activeTab === 'positions' && (
+          <PositionsTable positions={data.positions} />
+        )}
+
+        {/* Tab 3: AI Decisions Feed */}
+        {activeTab === 'decisions' && (
+          <DecisionFeed decisions={data.decisions} />
+        )}
+
+        {/* Tab 4: Lessons & Heuristics */}
+        {activeTab === 'lessons' && (
+          <LessonsMatrix lessons={data.lessons} />
+        )}
+
+        {/* Tab 5: Pool Intelligence */}
+        {activeTab === 'pools' && (
+          <PoolIntelligence pools={data.pools} />
+        )}
+
+        {/* Tab 6: VPS & System Health */}
+        {activeTab === 'health' && (
+          <BotHealth stats={data.stats} />
+        )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs font-mono text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
+          <span>Meridian BI v2.0 • High-Frequency Autonomous DLMM Intelligence</span>
+          <span>Targeting Meteora DLMM on Solana Mainnet</span>
+        </div>
+      </footer>
     </div>
   );
 }
